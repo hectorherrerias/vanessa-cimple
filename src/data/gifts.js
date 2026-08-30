@@ -160,9 +160,9 @@ export const GIFTS_DATA = [
       },
       {
         stepNumber: 3,
-        title: "¡Gran Revelación del Destino!",
-        badge: "¡Destino Confirmado: SALAMANCA! ✈️🏛️",
-        scratchPrompt: "✨ ¡Rasca fuerte para descubrir a dónde vamos! ✨",
+        title: "¿A dónde nos vamos?",
+        badge: "Pista 3: Gran Revelación ✈️",
+        scratchPrompt: "✨ ¡Rasca fuerte para descubrir el destino! ✨",
         imageSrc: "/images/salamanca.png",
         hintContent: {
           icon: "PlaneTakeoff",
