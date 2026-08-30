@@ -5,13 +5,14 @@ import { triggerGoldConfetti } from '../utils/confetti';
 import { SCRATCH_THRESHOLD_PERCENT } from '../data/gifts';
 
 /**
- * Componente de Lienzo Raspable (Scratch & Win) con soporte táctil 100% garantizado en móviles.
- * Utiliza Pointer Events + Touch Events nativos no pasivos para máxima compatibilidad con iOS/Android.
+ * Componente de Lienzo Raspable (Scratch & Win) con soporte táctil 100% perfecto.
+ * Corrige el cálculo de coordenadas High-DPI (Retina) en móviles y unifica eventos Pointer/Touch
+ * para que el raspado siga el dedo con total precisión y respuesta instantánea.
  */
 export const ScratchCanvas = ({
   width = 330,
   height = 340,
-  brushSize = 34,
+  brushSize = 45, // Tamaño amplio ideal para dedos en pantallas móviles
   threshold = SCRATCH_THRESHOLD_PERCENT,
   onComplete,
   isCompleted = false,
@@ -26,12 +27,12 @@ export const ScratchCanvas = ({
   const [fadingOut, setFadingOut] = useState(false);
   const [revealed, setRevealed] = useState(isCompleted);
 
-  // Inicializar y dibujar la lámina dorada en el canvas
+  // Dibujar lámina dorada opaca
   const drawFoil = useCallback((ctx, w, h) => {
     ctx.clearRect(0, 0, w, h);
     ctx.globalCompositeOperation = 'source-over';
 
-    // 1. Degradado metálico oro champagne 100% opaco
+    // 1. Fondo degradado oro champagne metálico
     const gradient = ctx.createLinearGradient(0, 0, w, h);
     gradient.addColorStop(0, '#E5C3A6');
     gradient.addColorStop(0.2, '#D4AF37');
@@ -43,76 +44,75 @@ export const ScratchCanvas = ({
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, w, h);
 
-    // 2. Patrón de destellos y estrellas
+    // 2. Destellos decorativos dorados
     ctx.save();
     ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
     for (let i = 0; i < 40; i++) {
       const x = (i * 73) % w;
       const y = (i * 91) % h;
-      const size = (i % 3) + 1.5;
+      const size = (i % 3) * (w / 330) + 2;
       
       ctx.beginPath();
       ctx.arc(x, y, size, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // 3. Bordes interiores
+    // 3. Bordes dobles elegantes
+    const borderWidth = Math.max(2, w / 160);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = borderWidth;
     ctx.strokeRect(10, 10, w - 20, h - 20);
 
     ctx.strokeStyle = 'rgba(117, 89, 25, 0.35)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(14, 14, w - 28, h - 28);
+    ctx.lineWidth = borderWidth * 0.7;
+    ctx.strokeRect(15, 15, w - 30, h - 30);
 
-    // 4. Texto central de invitación al raspado
+    // 4. Texto central nítido
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    ctx.font = '700 15px "Plus Jakarta Sans", sans-serif';
+    const fontSize = Math.max(14, Math.round(w / 22));
+    ctx.font = `700 ${fontSize}px "Plus Jakarta Sans", sans-serif`;
     ctx.fillStyle = 'rgba(95, 71, 23, 0.6)';
     ctx.fillText(promptText, w / 2 + 1, h / 2 - 2);
 
     ctx.fillStyle = '#261708';
     ctx.fillText(promptText, w / 2, h / 2 - 3);
 
-    ctx.font = '600 12px "Plus Jakarta Sans", sans-serif';
+    const subFontSize = Math.max(11, Math.round(w / 28));
+    ctx.font = `600 ${subFontSize}px "Plus Jakarta Sans", sans-serif`;
     ctx.fillStyle = '#4E3618';
-    ctx.fillText('👆 Usa tu dedo o ratón para rascar', w / 2, h / 2 + 26);
+    ctx.fillText('👆 Usa tu dedo o ratón para rascar', w / 2, h / 2 + fontSize * 1.8);
 
     ctx.restore();
   }, [promptText]);
 
-  // Configuración del canvas con High-DPI
+  // Inicializar canvas
   useEffect(() => {
     if (revealed) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const actualWidth = rect.width || width;
+    const actualHeight = rect.height || height;
 
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
+    canvas.width = Math.round(actualWidth * dpr);
+    canvas.height = Math.round(actualHeight * dpr);
 
-    ctx.scale(dpr, dpr);
-    drawFoil(ctx, width, height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    drawFoil(ctx, canvas.width, canvas.height);
   }, [width, height, drawFoil, revealed]);
 
-  // Calcular porcentaje rascado analizando píxeles transparentes
+  // Calcular porcentaje analizando píxeles transparentes
   const calculateScratchedPercentage = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return 0;
 
     const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const realWidth = Math.floor(width * dpr);
-    const realHeight = Math.floor(height * dpr);
-
-    const imageData = ctx.getImageData(0, 0, realWidth, realHeight);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const pixels = imageData.data;
     let transparentPixels = 0;
 
@@ -128,9 +128,9 @@ export const ScratchCanvas = ({
 
     const percent = Math.round((transparentPixels / sampledCount) * 100);
     return percent;
-  }, [width, height]);
+  }, []);
 
-  // Auto-revelación al superar el umbral (>50%)
+  // Revelación automática al superar el 50%
   const handleAutoReveal = useCallback(() => {
     if (revealed || fadingOut) return;
     setFadingOut(true);
@@ -146,8 +146,8 @@ export const ScratchCanvas = ({
     }, 450);
   }, [revealed, fadingOut, onComplete]);
 
-  // Obtener coordenadas relativas exactas (Touch, Pointer o Mouse)
-  const getCoordinates = useCallback((e) => {
+  // Obtener coordenadas exactas en el buffer interno del canvas
+  const getCanvasCoords = useCallback((e) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
 
@@ -163,24 +163,28 @@ export const ScratchCanvas = ({
       clientY = e.changedTouches[0].clientY;
     }
 
+    // Escala exacta entre coordenadas CSS del navegador y pixeles reales del canvas
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
     return {
-      x: clientX - rect.left,
-      y: clientY - rect.top,
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
     };
   }, []);
 
-  // Trazo suave de raspado
-  const scratch = useCallback((currentPoint) => {
+  // Raspar directamente en coordenadas del buffer del canvas
+  const scratchAt = useCallback((currentPoint) => {
     const canvas = canvasRef.current;
     if (!canvas || revealed || fadingOut) return;
 
     const ctx = canvas.getContext('2d');
     const dpr = window.devicePixelRatio || 1;
+    const actualBrush = brushSize * dpr;
 
     ctx.save();
-    ctx.scale(dpr, dpr);
     ctx.globalCompositeOperation = 'destination-out';
-    ctx.lineWidth = brushSize;
+    ctx.lineWidth = actualBrush;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
@@ -196,7 +200,7 @@ export const ScratchCanvas = ({
       ctx.stroke();
     } else {
       ctx.beginPath();
-      ctx.arc(currentPoint.x, currentPoint.y, brushSize / 2, 0, Math.PI * 2);
+      ctx.arc(currentPoint.x, currentPoint.y, actualBrush / 2, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -204,20 +208,22 @@ export const ScratchCanvas = ({
     lastPointRef.current = currentPoint;
   }, [brushSize, revealed, fadingOut]);
 
-  // Handlers de dibujo
-  const startDrawing = useCallback((e) => {
+  // Manejadores unificados
+  const onStart = useCallback((e) => {
     if (revealed || fadingOut) return;
+    if (e.cancelable) e.preventDefault();
     isDrawingRef.current = true;
-    const coords = getCoordinates(e);
+    const coords = getCanvasCoords(e);
     lastPointRef.current = coords;
-    scratch(coords);
+    scratchAt(coords);
     soundFx.playScratchTick();
-  }, [getCoordinates, scratch, revealed, fadingOut]);
+  }, [getCanvasCoords, scratchAt, revealed, fadingOut]);
 
-  const continueDrawing = useCallback((e) => {
+  const onMove = useCallback((e) => {
     if (!isDrawingRef.current || revealed || fadingOut) return;
-    const coords = getCoordinates(e);
-    scratch(coords);
+    if (e.cancelable) e.preventDefault();
+    const coords = getCanvasCoords(e);
+    scratchAt(coords);
 
     const currentPercent = calculateScratchedPercentage();
     setScratchPercent(currentPercent);
@@ -226,9 +232,9 @@ export const ScratchCanvas = ({
       isDrawingRef.current = false;
       handleAutoReveal();
     }
-  }, [getCoordinates, scratch, calculateScratchedPercentage, threshold, handleAutoReveal, revealed, fadingOut]);
+  }, [getCanvasCoords, scratchAt, calculateScratchedPercentage, threshold, handleAutoReveal, revealed, fadingOut]);
 
-  const stopDrawing = useCallback(() => {
+  const onEnd = useCallback(() => {
     if (!isDrawingRef.current) return;
     isDrawingRef.current = false;
     lastPointRef.current = null;
@@ -241,67 +247,46 @@ export const ScratchCanvas = ({
     }
   }, [calculateScratchedPercentage, threshold, handleAutoReveal]);
 
-  // Listeners nativos NO pasivos directamente en el Canvas (vital para móviles)
+  // Listener nativo no pasivo para bloquear cualquier gesto móvil y responder al 100%
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || revealed) return;
 
-    const handleTouchStart = (e) => {
-      e.preventDefault();
-      startDrawing(e);
+    const touchStartHandler = (e) => onStart(e);
+    const touchMoveHandler = (e) => onMove(e);
+    const touchEndHandler = (e) => onEnd();
+
+    canvas.addEventListener('touchstart', touchStartHandler, { passive: false });
+    canvas.addEventListener('touchmove', touchMoveHandler, { passive: false });
+    canvas.addEventListener('touchend', touchEndHandler, { passive: false });
+    canvas.addEventListener('touchcancel', touchEndHandler, { passive: false });
+
+    // Pointer events para ratón / desktop
+    const pointerDownHandler = (e) => {
+      if (e.pointerType === 'mouse') onStart(e);
+    };
+    const pointerMoveHandler = (e) => {
+      if (e.pointerType === 'mouse') onMove(e);
+    };
+    const pointerUpHandler = (e) => {
+      if (e.pointerType === 'mouse') onEnd();
     };
 
-    const handleTouchMove = (e) => {
-      e.preventDefault();
-      continueDrawing(e);
-    };
-
-    const handleTouchEnd = (e) => {
-      e.preventDefault();
-      stopDrawing();
-    };
-
-    const handlePointerDown = (e) => {
-      try {
-        canvas.setPointerCapture(e.pointerId);
-      } catch {}
-      startDrawing(e);
-    };
-
-    const handlePointerMove = (e) => {
-      continueDrawing(e);
-    };
-
-    const handlePointerUp = (e) => {
-      try {
-        canvas.releasePointerCapture(e.pointerId);
-      } catch {}
-      stopDrawing();
-    };
-
-    // Agregar listeners con { passive: false } para que preventDefault funcione siempre
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-    canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-
-    canvas.addEventListener('pointerdown', handlePointerDown);
-    canvas.addEventListener('pointermove', handlePointerMove);
-    canvas.addEventListener('pointerup', handlePointerUp);
-    canvas.addEventListener('pointercancel', handlePointerUp);
+    canvas.addEventListener('pointerdown', pointerDownHandler);
+    window.addEventListener('pointermove', pointerMoveHandler);
+    window.addEventListener('pointerup', pointerUpHandler);
 
     return () => {
-      canvas.removeEventListener('touchstart', handleTouchStart);
-      canvas.removeEventListener('touchmove', handleTouchMove);
-      canvas.removeEventListener('touchend', handleTouchEnd);
-      canvas.removeEventListener('touchcancel', handleTouchEnd);
+      canvas.removeEventListener('touchstart', touchStartHandler);
+      canvas.removeEventListener('touchmove', touchMoveHandler);
+      canvas.removeEventListener('touchend', touchEndHandler);
+      canvas.removeEventListener('touchcancel', touchEndHandler);
 
-      canvas.removeEventListener('pointerdown', handlePointerDown);
-      canvas.removeEventListener('pointermove', handlePointerMove);
-      canvas.removeEventListener('pointerup', handlePointerUp);
-      canvas.removeEventListener('pointercancel', handlePointerUp);
+      canvas.removeEventListener('pointerdown', pointerDownHandler);
+      window.removeEventListener('pointermove', pointerMoveHandler);
+      window.removeEventListener('pointerup', pointerUpHandler);
     };
-  }, [startDrawing, continueDrawing, stopDrawing, revealed]);
+  }, [onStart, onMove, onEnd, revealed]);
 
   return (
     <div 
@@ -315,12 +300,12 @@ export const ScratchCanvas = ({
         WebkitUserSelect: 'none',
       }}
     >
-      {/* Capa inferior (Contenido secreto revelado progresivamente) */}
+      {/* Capa inferior (Contenido secreto) */}
       <div className="absolute inset-0 w-full h-full p-3 sm:p-4 flex flex-col items-center justify-center bg-gradient-to-b from-velvet-900 via-velvet-850 to-velvet-950 text-center overflow-hidden pointer-events-none select-none">
         {children}
       </div>
 
-      {/* Capa superior rascable (Canvas con eventos touch y pointer no pasivos) */}
+      {/* Capa superior rascable (Canvas nativo) */}
       {!revealed && (
         <canvas
           ref={canvasRef}
@@ -331,11 +316,9 @@ export const ScratchCanvas = ({
             touchAction: 'none',
             WebkitTouchCallout: 'none',
             WebkitUserSelect: 'none',
+            width: '100%',
+            height: '100%',
           }}
-          onMouseDown={startDrawing}
-          onMouseMove={continueDrawing}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
         />
       )}
 
